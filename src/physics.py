@@ -15,23 +15,30 @@ def calculate_drag(
     velocity: float,
     drag_coefficient: float,
     cross_sectional_area: float,
-    air_density: float = AIR_DENSITY,
+    air_density: float | None = None,
 ) -> float:
-    """Return drag force magnitude opposing motion."""
+    """Return aerodynamic drag magnitude in newtons.
 
-    return 0.5 * air_density * drag_coefficient * cross_sectional_area * velocity * velocity
+    Drag grows with dynamic pressure, so velocity is squared. The signed
+    direction is handled by ``calculate_net_force`` because drag always opposes
+    the current direction of motion.
+    """
+
+    density = AIR_DENSITY if air_density is None else max(air_density, 0.0)
+    if drag_coefficient < 0.0 or cross_sectional_area < 0.0:
+        raise ValueError("Drag coefficient and area must be non-negative.")
+    return 0.5 * density * drag_coefficient * cross_sectional_area * velocity * velocity
 
 
-def calculate_thrust(thrust: float, burn_active: bool) -> float:
-    """Return engine thrust when the motor is burning."""
-
-    return thrust if burn_active else 0.0
-
-
-def calculate_net_force(thrust_force: float, drag_force: float, gravity_force: float, velocity: float) -> float:
+def calculate_net_force(
+    thrust_force: float,
+    drag_force: float,
+    gravity_force: float,
+    velocity: float,
+) -> float:
     """Return signed net force using upward as positive."""
 
-    drag_direction = -1.0 if velocity >= 0 else 1.0
+    drag_direction = -1.0 if velocity > 0.0 else 1.0
     drag_component = drag_force * drag_direction
     return thrust_force + drag_component - gravity_force
 

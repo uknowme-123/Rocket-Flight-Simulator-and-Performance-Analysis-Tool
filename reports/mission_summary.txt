@@ -1,5 +1,8 @@
-maximum_altitude_m: 1813.4879750264297
-maximum_velocity_mps: 217.60316072130072
-maximum_acceleration_mps2: 51.003873096086785
-flight_duration_s: 47.1000000000004
-apogee_time_s: 17.099999999999973
+maximum_altitude_m: 1474.8243545059688
+maximum_velocity_mps: 193.3976225052149
+maximum_acceleration_mps2: 53.94041548427043
+burnout_time_s: 7.899999999999988
+apogee_time_s: 16.699999999999967
+total_flight_duration_s: 41.50000000000032
+landing_velocity_mps: -73.79138348197719
+flight_duration_s: 41.50000000000032

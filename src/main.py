@@ -6,9 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-import pandas as pd
-
-from mission import analyze_mission
+from mission import analyze_mission, build_phase_timeline
 from report_generator import generate_mission_report
 from rocket import Rocket
 from simulator import RocketSimulator
@@ -59,11 +57,13 @@ def main() -> None:
     save_mission_summary(mission_summary, REPORTS_DIR / "mission_summary.txt")
 
     plot_paths = generate_plots(telemetry, str(SCREENSHOTS_DIR))
+    phase_timeline = build_phase_timeline(telemetry)
     generate_mission_report(
         output_path=str(REPORTS_DIR / "mission_report.pdf"),
         mission_summary=mission_summary,
         rocket_spec=parameters,
         plot_paths=plot_paths,
+        phase_timeline=phase_timeline,
     )
 
     print("Mission Summary")

@@ -13,6 +13,8 @@ import pandas as pd
 
 
 def _save_plot(x, y, title: str, x_label: str, y_label: str, output_path: Path) -> None:
+    """Save a single line plot with consistent engineering styling."""
+
     plt.figure(figsize=(9, 5))
     plt.plot(x, y, linewidth=2.0)
     plt.title(title)
@@ -25,26 +27,58 @@ def _save_plot(x, y, title: str, x_label: str, y_label: str, output_path: Path) 
 
 
 def generate_plots(telemetry: pd.DataFrame, output_dir: str) -> dict[str, str]:
+    """Generate all mission performance plots and return their file paths."""
+
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
-    altitude_plot = output_path / "altitude_plot.png"
-    velocity_plot = output_path / "velocity_plot.png"
-    acceleration_plot = output_path / "acceleration_plot.png"
+    plots = {
+        "altitude_plot": output_path / "altitude_plot.png",
+        "velocity_plot": output_path / "velocity_plot.png",
+        "acceleration_plot": output_path / "acceleration_plot.png",
+        "mass_plot": output_path / "mass_plot.png",
+        "thrust_plot": output_path / "thrust_plot.png",
+    }
 
-    _save_plot(telemetry["time_s"], telemetry["altitude_m"], "Altitude vs Time", "Time (s)", "Altitude (m)", altitude_plot)
-    _save_plot(telemetry["time_s"], telemetry["velocity_mps"], "Velocity vs Time", "Time (s)", "Velocity (m/s)", velocity_plot)
+    _save_plot(
+        telemetry["time_s"],
+        telemetry["altitude_m"],
+        "Altitude vs Time",
+        "Time (s)",
+        "Altitude (m)",
+        plots["altitude_plot"],
+    )
+    _save_plot(
+        telemetry["time_s"],
+        telemetry["velocity_mps"],
+        "Velocity vs Time",
+        "Time (s)",
+        "Velocity (m/s)",
+        plots["velocity_plot"],
+    )
     _save_plot(
         telemetry["time_s"],
         telemetry["acceleration_mps2"],
         "Acceleration vs Time",
         "Time (s)",
-        "Acceleration (m/s²)",
-        acceleration_plot,
+        "Acceleration (m/s^2)",
+        plots["acceleration_plot"],
+    )
+    _save_plot(
+        telemetry["time_s"],
+        telemetry["mass_kg"],
+        "Mass vs Time",
+        "Time (s)",
+        "Mass (kg)",
+        plots["mass_plot"],
+    )
+    _save_plot(
+        telemetry["time_s"],
+        telemetry["thrust_n"],
+        "Thrust vs Time",
+        "Time (s)",
+        "Thrust (N)",
+        plots["thrust_plot"],
     )
 
-    return {
-        "altitude_plot": str(altitude_plot),
-        "velocity_plot": str(velocity_plot),
-        "acceleration_plot": str(acceleration_plot),
-    }
+    return {name: str(path) for name, path in plots.items()}

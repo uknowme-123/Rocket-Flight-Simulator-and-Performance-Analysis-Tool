@@ -14,18 +14,29 @@ This simulator models the major phases of a rocket launch:
 - Apogee
 - Descent and landing
 
-The engine calculates thrust, gravity, drag, velocity, altitude, acceleration, fuel consumption, apogee, and flight duration. The output is saved as telemetry data, visual plots, and a mission report.
+The engine calculates variable thrust, gravity, altitude-dependent drag, velocity, altitude, acceleration, mass depletion, fuel consumption, apogee, and flight duration. The output is saved as telemetry data, visual plots, and a mission report.
 
 ## Features
 
 - Physics-based vertical rocket simulation
+- International Standard Atmosphere density approximation
+- Variable thrust curve with ignition, ramp-up, peak, sustain, and tail-off phases
+- Thrust-linked fuel consumption and changing rocket mass
+- Automatic flight phase detection
 - OOP rocket model with fuel tracking
-- Telemetry logging to CSV
+- Enhanced telemetry logging to CSV
 - Mission summary metrics
-- Matplotlib engineering plots
+- Matplotlib engineering plots for altitude, velocity, acceleration, mass, and thrust
 - PDF report generation with ReportLab
 - Streamlit dashboard for interactive analysis
 - Unit tests for core physics and simulation logic
+
+## Advanced Physics Modules
+
+- `src/atmosphere.py`: simplified ISA density model
+- `src/propulsion.py`: thrust curve and mass-flow utilities
+- `src/flight_phases.py`: automatic mission phase detection
+- `src/physics.py`: force and acceleration calculations
 
 ## Folder Structure
 
@@ -67,6 +78,10 @@ rocket-flight-simulator/
 
 The simulator uses the following equations:
 
+### Atmospheric Density
+
+The simulator uses a simplified International Standard Atmosphere model. Air density starts near 1.225 kg/m^3 at sea level and decreases with altitude.
+
 ### Gravity
 
 $$F_g = m g$$
@@ -74,6 +89,12 @@ $$F_g = m g$$
 ### Drag
 
 $$F_d = \frac{1}{2} \rho C_d A V^2$$
+
+The density term comes from the atmospheric model, and the drag direction always opposes velocity during ascent and descent.
+
+### Variable Thrust and Mass Flow
+
+The motor thrust curve includes ignition, ramp-up, peak thrust, sustained burn, and tail-off. Propellant mass flow is tied to thrust production using curve-calibrated specific impulse.
 
 ### Newton's Second Law
 
@@ -119,6 +140,8 @@ This generates:
 - `screenshots/altitude_plot.png`
 - `screenshots/velocity_plot.png`
 - `screenshots/acceleration_plot.png`
+- `screenshots/mass_plot.png`
+- `screenshots/thrust_plot.png`
 
 ### Launch the dashboard
 
