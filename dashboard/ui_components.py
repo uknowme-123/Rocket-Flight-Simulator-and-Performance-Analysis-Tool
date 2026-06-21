@@ -237,6 +237,64 @@ div[data-testid="stMetric"] {
     margin-bottom: 0.45rem;
 }
 
+.subsystem-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
+    gap: 0.6rem;
+    margin: 0.4rem 0 1rem;
+}
+
+.subsystem-card {
+    border: 1px solid rgba(125, 211, 252, 0.16);
+    border-radius: 8px;
+    background: rgba(2, 6, 23, 0.48);
+    padding: 0.75rem;
+}
+
+.subsystem-state {
+    font-size: 0.95rem;
+    font-weight: 800;
+    margin-top: 0.2rem;
+}
+
+.event-log {
+    border: 1px solid rgba(125, 211, 252, 0.16);
+    border-radius: 8px;
+    background: rgba(2, 6, 23, 0.48);
+    padding: 0.8rem;
+    max-height: 280px;
+    overflow-y: auto;
+}
+
+.event-row {
+    color: #cdeafe;
+    font-family: Consolas, monospace;
+    font-size: 0.9rem;
+    padding: 0.35rem 0;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.event-row:last-child {
+    border-bottom: 0;
+}
+
+.live-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    color: #22c55e;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.live-dot {
+    width: 0.65rem;
+    height: 0.65rem;
+    border-radius: 50%;
+    background: #22c55e;
+    box-shadow: 0 0 16px #22c55e;
+}
+
 .stTabs [data-baseweb="tab-list"] {
     gap: 0.5rem;
 }
@@ -294,6 +352,17 @@ def metric_card(label: str, value: str, accent: str = "#38bdf8") -> str:
     )
 
 
+def subsystem_card(label: str, state: str, accent: str) -> str:
+    """Return HTML for one subsystem health card."""
+
+    return (
+        f'<div class="subsystem-card" style="border-color:{accent}55;">'
+        f'<div class="card-label">{label}</div>'
+        f'<div class="subsystem-state" style="color:{accent};">{state}</div>'
+        "</div>"
+    )
+
+
 def build_telemetry_chart(
     telemetry: pd.DataFrame,
     column: str,
@@ -322,3 +391,40 @@ def build_telemetry_chart(
         .properties(height=280)
         .interactive()
     )
+
+
+def build_live_telemetry_chart(
+    telemetry: pd.DataFrame,
+    column: str,
+    title: str,
+    unit: str,
+    color: str,
+    current_frame: int,
+) -> alt.Chart:
+    """Build a live-style chart that reveals telemetry up to the current frame."""
+
+    frame = max(0, min(current_frame, len(telemetry) - 1))
+    chart_data = telemetry.iloc[: frame + 1][["time_s", column, "flight_phase"]].rename(
+        columns={"time_s": "met_s", column: "value"}
+    )
+    current_point = chart_data.iloc[[len(chart_data) - 1]]
+
+    line = (
+        alt.Chart(chart_data)
+        .mark_line(color=color, strokeWidth=2.5)
+        .encode(
+            x=alt.X("met_s:Q", title="Mission Elapsed Time (s)"),
+            y=alt.Y("value:Q", title=f"{title} ({unit})"),
+            tooltip=[
+                alt.Tooltip("met_s:Q", title="Mission Elapsed Time (s)", format=".2f"),
+                alt.Tooltip("value:Q", title=f"{title} ({unit})", format=".3f"),
+                alt.Tooltip("flight_phase:N", title="Flight Phase"),
+            ],
+        )
+    )
+    marker = (
+        alt.Chart(current_point)
+        .mark_point(color="#ffffff", filled=True, size=90)
+        .encode(x="met_s:Q", y="value:Q")
+    )
+    return (line + marker).properties(height=240).interactive()

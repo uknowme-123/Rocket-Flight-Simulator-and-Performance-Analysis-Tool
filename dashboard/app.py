@@ -25,10 +25,12 @@ from ui_components import (
     CHART_SPECS,
     MISSION_CONTROL_CSS,
     MISSION_PRESETS,
+    build_live_telemetry_chart,
     build_telemetry_chart,
     format_number,
     metric_card,
     phase_badge,
+    subsystem_card,
 )
 
 
@@ -56,6 +58,9 @@ def initialize_session_state() -> None:
     st.session_state.setdefault("countdown_seconds", 5)
     st.session_state.setdefault("mission_status", "STANDBY")
     st.session_state.setdefault("active_preset_name", nominal_preset)
+    st.session_state.setdefault("live_stream_enabled", False)
+    st.session_state.setdefault("stream_step", 4)
+    st.session_state.setdefault("stream_interval_s", 0.18)
 
     for key, value in MISSION_PRESETS[nominal_preset].items():
         st.session_state.setdefault(f"cfg_{key}", value)
@@ -174,6 +179,12 @@ def render_sidebar() -> tuple[dict[str, float], bool, bool]:
             max_value=10,
             key="countdown_seconds",
         )
+        st.select_slider(
+            "Telemetry Stream Rate",
+            options=[1, 2, 4, 8, 12],
+            key="stream_step",
+            help="Frames advanced per screen refresh.",
+        )
         launch_requested = st.button(
             "Initiate Countdown",
             type="primary",
@@ -275,6 +286,75 @@ def render_metric_grid(sample: pd.Series | None) -> None:
     )
 
 
+def subsystem_states(sample: pd.Series | None) -> list[tuple[str, str, str]]:
+    """Derive realistic subsystem states from the current telemetry sample."""
+
+    if sample is None:
+        return [
+            ("Range Safety", "STANDBY", "#94a3b8"),
+            ("Guidance", "AWAITING NAV", "#94a3b8"),
+            ("Propulsion", "SAFE", "#94a3b8"),
+            ("Telemetry Link", "IDLE", "#94a3b8"),
+            ("Recovery", "STOWED", "#94a3b8"),
+        ]
+
+    phase = str(sample["flight_phase"])
+    thrust = float(sample["thrust_n"])
+    altitude = float(sample["altitude_m"])
+
+    propulsion_state = "BURN ACTIVE" if thrust > 0.0 else "SHUTDOWN"
+    guidance_state = "ASCENT TRACK" if sample["velocity_mps"] >= 0.0 else "DESCENT TRACK"
+    recovery_state = "ARMED" if phase in {"DESCENT", "LANDING"} else "STOWED"
+    range_state = "GREEN" if altitude >= 0.0 else "HOLD"
+
+    return [
+        ("Range Safety", range_state, "#22c55e"),
+        ("Guidance", guidance_state, "#38bdf8"),
+        ("Propulsion", propulsion_state, "#f59e0b" if thrust > 0.0 else "#94a3b8"),
+        ("Telemetry Link", "LOCKED", "#22c55e"),
+        ("Recovery", recovery_state, "#c084fc" if recovery_state == "ARMED" else "#94a3b8"),
+    ]
+
+
+def mission_events(telemetry: pd.DataFrame, frame: int) -> list[str]:
+    """Build a mission event log up to the selected telemetry frame."""
+
+    active = telemetry.iloc[: frame + 1]
+    events = ["T-00.00 | Launch sequencer armed"]
+    previous_phase = None
+
+    for _, row in active.iterrows():
+        phase = str(row["flight_phase"])
+        if phase != previous_phase:
+            events.append(f"T+{row['time_s']:05.2f} | Phase transition: {phase}")
+            previous_phase = phase
+
+    powered = active[active["thrust_n"] > 0.0]
+    if not powered.empty:
+        burnout_time = powered["time_s"].iloc[-1]
+        if active["thrust_n"].iloc[-1] <= 0.0:
+            events.append(f"T+{burnout_time:05.2f} | Motor burnout confirmed")
+
+    if "APOGEE" in set(active["flight_phase"]):
+        apogee_row = active.loc[active["altitude_m"].idxmax()]
+        events.append(f"T+{apogee_row['time_s']:05.2f} | Apogee reached")
+
+    if str(active["flight_phase"].iloc[-1]) == "LANDING":
+        events.append(f"T+{active['time_s'].iloc[-1]:05.2f} | Touchdown detected")
+
+    return events[-9:]
+
+
+def render_subsystem_panel(sample: pd.Series | None) -> None:
+    """Render subsystem health cards."""
+
+    cards = [subsystem_card(label, state, color) for label, state, color in subsystem_states(sample)]
+    st.markdown(
+        '<div class="subsystem-grid">' + "".join(cards) + "</div>",
+        unsafe_allow_html=True,
+    )
+
+
 def render_playback_controls(mission_package: dict[str, Any]) -> None:
     """Render telemetry playback controls for live feed inspection."""
 
@@ -289,17 +369,23 @@ def render_playback_controls(mission_package: dict[str, Any]) -> None:
     )
     st.session_state.telemetry_frame = selected_frame
 
-    control_columns = st.columns(4)
-    if control_columns[0].button("Reset Feed", use_container_width=True):
+    control_columns = st.columns(5)
+    if control_columns[0].button("Go Live", use_container_width=True):
+        st.session_state.live_stream_enabled = True
+        st.rerun()
+    if control_columns[1].button("Hold", use_container_width=True):
+        st.session_state.live_stream_enabled = False
+        st.rerun()
+    if control_columns[2].button("Reset Feed", use_container_width=True):
+        st.session_state.live_stream_enabled = False
         st.session_state.telemetry_frame = 0
         st.rerun()
-    if control_columns[1].button("Step +1", use_container_width=True):
+    if control_columns[3].button("Step +1", use_container_width=True):
+        st.session_state.live_stream_enabled = False
         st.session_state.telemetry_frame = min(max_frame, st.session_state.telemetry_frame + 1)
         st.rerun()
-    if control_columns[2].button("Stream +25", use_container_width=True):
-        st.session_state.telemetry_frame = min(max_frame, st.session_state.telemetry_frame + 25)
-        st.rerun()
-    if control_columns[3].button("Go To Landing", use_container_width=True):
+    if control_columns[4].button("Landing", use_container_width=True):
+        st.session_state.live_stream_enabled = False
         st.session_state.telemetry_frame = max_frame
         st.rerun()
 
@@ -316,6 +402,11 @@ def render_live_feed(mission_package: dict[str, Any] | None) -> None:
     sample = telemetry.iloc[frame]
     feed_window = telemetry.iloc[max(0, frame - 9) : frame + 1]
 
+    if st.session_state.live_stream_enabled:
+        st.markdown(
+            '<div class="live-indicator"><span class="live-dot"></span>Live telemetry acquisition</div>',
+            unsafe_allow_html=True,
+        )
     st.markdown(phase_badge(str(sample["flight_phase"])), unsafe_allow_html=True)
     st.markdown(
         f"""
@@ -329,17 +420,61 @@ def render_live_feed(mission_package: dict[str, Any] | None) -> None:
     st.dataframe(feed_window, use_container_width=True, height=270)
 
 
+def render_event_log(mission_package: dict[str, Any] | None) -> None:
+    """Render mission events up to the current telemetry frame."""
+
+    if not mission_package:
+        return
+
+    telemetry = mission_package["telemetry"]
+    frame = min(st.session_state.telemetry_frame, len(telemetry) - 1)
+    rows = "".join(f'<div class="event-row">{event}</div>' for event in mission_events(telemetry, frame))
+    st.markdown(f'<div class="event-log">{rows}</div>', unsafe_allow_html=True)
+
+
+def render_live_profile(mission_package: dict[str, Any] | None) -> None:
+    """Render live-revealed altitude and velocity traces."""
+
+    if not mission_package:
+        return
+
+    telemetry = mission_package["telemetry"]
+    frame = min(st.session_state.telemetry_frame, len(telemetry) - 1)
+    left_column, right_column = st.columns(2)
+    with left_column:
+        st.altair_chart(
+            build_live_telemetry_chart(telemetry, "altitude_m", "Altitude", "m", "#4dd6ff", frame),
+            use_container_width=True,
+        )
+    with right_column:
+        st.altair_chart(
+            build_live_telemetry_chart(telemetry, "velocity_mps", "Velocity", "m/s", "#f9c74f", frame),
+            use_container_width=True,
+        )
+
+
 def render_mission_control_tab(mission_package: dict[str, Any] | None) -> None:
     """Render the main mission-control tab."""
 
     sample = current_sample(mission_package)
     render_metric_grid(sample)
+    st.subheader("Subsystem Health")
+    render_subsystem_panel(sample)
 
     if mission_package:
         render_playback_controls(mission_package)
 
+        telemetry = mission_package["telemetry"]
+        progress = st.session_state.telemetry_frame / max(len(telemetry) - 1, 1)
+        st.progress(progress, text=f"Mission Data Stream {progress * 100:.1f}%")
+        render_live_profile(mission_package)
+
     st.subheader("Live Telemetry Feed")
-    render_live_feed(mission_package)
+    left_column, right_column = st.columns([1.25, 1.0])
+    with left_column:
+        render_live_feed(mission_package)
+    with right_column:
+        render_event_log(mission_package)
 
 
 def render_telemetry_tab(mission_package: dict[str, Any] | None) -> None:
@@ -452,13 +587,15 @@ def main() -> None:
         st.session_state.mission_status = "TERMINAL COUNT"
         perform_countdown(int(st.session_state.countdown_seconds))
         st.session_state.mission_package = run_mission(configuration)
-        st.session_state.telemetry_frame = len(st.session_state.mission_package["telemetry"]) - 1
-        st.session_state.mission_status = "MISSION COMPLETE"
+        st.session_state.telemetry_frame = 0
+        st.session_state.live_stream_enabled = True
+        st.session_state.mission_status = "LIVE TELEMETRY"
         st.rerun()
 
     if quick_run_requested:
         st.session_state.mission_package = run_mission(configuration)
         st.session_state.telemetry_frame = len(st.session_state.mission_package["telemetry"]) - 1
+        st.session_state.live_stream_enabled = False
         st.session_state.mission_status = "ANALYSIS COMPLETE"
         st.rerun()
 
@@ -477,6 +614,20 @@ def main() -> None:
 
     with report_tab:
         render_report_tab(st.session_state.mission_package)
+
+    if st.session_state.live_stream_enabled and st.session_state.mission_package:
+        telemetry = st.session_state.mission_package["telemetry"]
+        max_frame = len(telemetry) - 1
+        if st.session_state.telemetry_frame >= max_frame:
+            st.session_state.live_stream_enabled = False
+            st.session_state.mission_status = "MISSION COMPLETE"
+        else:
+            st.session_state.telemetry_frame = min(
+                max_frame,
+                st.session_state.telemetry_frame + int(st.session_state.stream_step),
+            )
+            time.sleep(float(st.session_state.stream_interval_s))
+            st.rerun()
 
 
 if __name__ == "__main__":
