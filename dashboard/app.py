@@ -21,6 +21,13 @@ from rocket import Rocket
 from simulator import RocketSimulator
 from visualization import generate_plots
 
+from audio_system import (
+    initialize_audio_state,
+    render_alert,
+    render_audio_controls,
+    reset_audio_events,
+    trigger_audio,
+)
 from ui_components import (
     CHART_SPECS,
     MISSION_CONTROL_CSS,
@@ -61,6 +68,7 @@ def initialize_session_state() -> None:
     st.session_state.setdefault("live_stream_enabled", False)
     st.session_state.setdefault("stream_step", 4)
     st.session_state.setdefault("stream_interval_s", 0.18)
+    initialize_audio_state()
 
     for key, value in MISSION_PRESETS[nominal_preset].items():
         st.session_state.setdefault(f"cfg_{key}", value)
@@ -97,6 +105,7 @@ def run_mission(parameters: dict[str, float]) -> dict[str, Any]:
     summary = analyze_mission(telemetry)
     phase_timeline = build_phase_timeline(telemetry)
     plot_paths = generate_plots(telemetry, str(SCREENSHOTS_DIR))
+    warnings = evaluate_mission_warnings(parameters, telemetry, summary)
 
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     generate_mission_report(
@@ -114,7 +123,32 @@ def run_mission(parameters: dict[str, float]) -> dict[str, Any]:
         "plot_paths": plot_paths,
         "parameters": parameters,
         "report_path": REPORT_PATH,
+        "warnings": warnings,
     }
+
+
+def evaluate_mission_warnings(
+    parameters: dict[str, float],
+    telemetry: pd.DataFrame,
+    summary: dict[str, Any],
+) -> list[str]:
+    """Return mission safety warnings for dashboard alerting."""
+
+    warnings: list[str] = []
+    if parameters["fuel_mass"] <= 0.0:
+        warnings.append("Invalid mission parameter: propellant mass is zero.")
+    if parameters["thrust"] <= 0.0:
+        warnings.append("Invalid mission parameter: peak thrust is zero.")
+    if telemetry.empty:
+        warnings.append("Simulation instability: telemetry stream is empty.")
+        return warnings
+    if telemetry[["altitude_m", "velocity_mps", "acceleration_mps2"]].isna().any().any():
+        warnings.append("Simulation instability: non-numeric telemetry detected.")
+    if summary["maximum_acceleration_mps2"] > 80.0:
+        warnings.append("Excessive acceleration exceeds 80 m/s^2 structural limit.")
+    if abs(summary["landing_velocity_mps"]) > 20.0:
+        warnings.append("Landing velocity exceeds the 20 m/s safe recovery limit.")
+    return warnings
 
 
 def current_sample(mission_package: dict[str, Any] | None) -> pd.Series | None:
@@ -185,6 +219,7 @@ def render_sidebar() -> tuple[dict[str, float], bool, bool]:
             key="stream_step",
             help="Frames advanced per screen refresh.",
         )
+        render_audio_controls()
         launch_requested = st.button(
             "Initiate Countdown",
             type="primary",
@@ -246,6 +281,8 @@ def perform_countdown(seconds: int) -> None:
     countdown_slot = st.empty()
     for remaining in range(seconds, -1, -1):
         callout = "Main engine start" if remaining == 0 else "Terminal count active"
+        if remaining > 0:
+            trigger_audio("countdown", unique_key=f"countdown_{remaining}", force=True)
         countdown_slot.markdown(
             f"""
             <div class="countdown-display">
@@ -420,6 +457,35 @@ def render_live_feed(mission_package: dict[str, Any] | None) -> None:
     st.dataframe(feed_window, use_container_width=True, height=270)
 
 
+def dispatch_sample_events(sample: pd.Series, mission_package: dict[str, Any]) -> None:
+    """Trigger one-shot audio and alert banners for the current sample."""
+
+    phase = str(sample["flight_phase"])
+    phase_events = {
+        "LIFTOFF": ("launch", "🚀 LIFTOFF CONFIRMED"),
+        "POWERED_ASCENT": ("engine_burn", "Powered ascent engine burn active"),
+        "APOGEE": ("apogee", "🎯 APOGEE REACHED"),
+        "DESCENT": ("descent", "⬇ DESCENT PHASE INITIATED"),
+        "LANDING": ("landing", "🛬 VEHICLE RECOVERED"),
+    }
+
+    if phase in phase_events:
+        event_name, message = phase_events[phase]
+        if trigger_audio(event_name):
+            render_alert(event_name, message)
+
+    if phase == "LANDING" and trigger_audio("mission_complete"):
+        render_alert("mission_complete", "✅ MISSION SUCCESSFULLY COMPLETED")
+
+    for index, warning in enumerate(mission_package.get("warnings", [])):
+        if warning.startswith("Landing velocity") and phase != "LANDING":
+            continue
+        if warning.startswith("Excessive acceleration") and abs(sample["acceleration_mps2"]) <= 80.0:
+            continue
+        if trigger_audio("warning", unique_key=f"warning_{index}"):
+            render_alert("warning", warning)
+
+
 def render_event_log(mission_package: dict[str, Any] | None) -> None:
     """Render mission events up to the current telemetry frame."""
 
@@ -457,6 +523,9 @@ def render_mission_control_tab(mission_package: dict[str, Any] | None) -> None:
     """Render the main mission-control tab."""
 
     sample = current_sample(mission_package)
+    if sample is not None and mission_package:
+        dispatch_sample_events(sample, mission_package)
+
     render_metric_grid(sample)
     st.subheader("Subsystem Health")
     render_subsystem_panel(sample)
@@ -584,6 +653,7 @@ def main() -> None:
     render_hero(st.session_state.mission_package)
 
     if launch_requested:
+        reset_audio_events()
         st.session_state.mission_status = "TERMINAL COUNT"
         perform_countdown(int(st.session_state.countdown_seconds))
         st.session_state.mission_package = run_mission(configuration)
@@ -593,6 +663,7 @@ def main() -> None:
         st.rerun()
 
     if quick_run_requested:
+        reset_audio_events()
         st.session_state.mission_package = run_mission(configuration)
         st.session_state.telemetry_frame = len(st.session_state.mission_package["telemetry"]) - 1
         st.session_state.live_stream_enabled = False
