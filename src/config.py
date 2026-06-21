@@ -1,0 +1,8 @@
+"""Global configuration for the rocket flight simulator."""
+
+GRAVITY = 9.81
+AIR_DENSITY = 1.225
+TIME_STEP = 0.1
+DEFAULT_DRAG_COEFFICIENT = 0.45
+DEFAULT_CROSS_SECTIONAL_AREA = 0.02
+MAX_SIMULATION_TIME = 300.0

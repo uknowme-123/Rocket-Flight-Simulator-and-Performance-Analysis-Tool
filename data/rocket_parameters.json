@@ -1,0 +1,8 @@
+{
+  "dry_mass": 3.0,
+  "fuel_mass": 2.0,
+  "thrust": 300.0,
+  "burn_time": 8.0,
+  "drag_coefficient": 0.45,
+  "cross_sectional_area": 0.02
+}

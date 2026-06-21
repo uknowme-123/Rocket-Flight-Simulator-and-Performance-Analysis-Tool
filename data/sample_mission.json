@@ -1,0 +1,10 @@
+{
+  "mission_name": "Student Launch Demonstration",
+  "launch_site": "Open Field Test Range",
+  "payload_mass": 0.0,
+  "target_apogee_m": 1200.0,
+  "weather": {
+    "wind_speed_mps": 2.0,
+    "temperature_c": 28.0
+  }
+}
