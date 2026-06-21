@@ -29,7 +29,31 @@ The engine calculates variable thrust, gravity, altitude-dependent drag, velocit
 - Matplotlib engineering plots for altitude, velocity, acceleration, mass, and thrust
 - PDF report generation with ReportLab
 - Streamlit dashboard for interactive analysis
+- Rocket Library with predefined launch vehicles and custom mode
+- Rocket Comparison tab for sortable vehicle benchmarking
 - Unit tests for core physics and simulation logic
+
+## Launch Vehicle Library
+
+The dashboard now includes a launch vehicle selector with predefined vehicles:
+
+- PSLV
+- GSLV Mk II
+- LVM3
+- SSLV
+- Falcon 9
+- Falcon Heavy
+- Saturn V
+- Soyuz
+- Ariane 5
+- Custom Rocket
+
+When a predefined vehicle is selected, the simulator auto-populates mass model,
+thrust, burn time, drag coefficient, and cross-sectional area using JSON-backed
+reference data in [data/rocket_library.json](data/rocket_library.json).
+
+Vehicle specifications are simplified and adapted for educational simulation.
+The simulator does not reproduce real-world launch performance.
 
 ## Advanced Physics Modules
 

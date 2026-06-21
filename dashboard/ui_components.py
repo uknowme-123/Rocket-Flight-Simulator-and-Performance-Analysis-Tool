@@ -64,6 +64,17 @@ PHASE_COLORS: dict[str, str] = {
 }
 
 
+FLIGHT_PHASE_SEQUENCE: tuple[str, ...] = (
+    "PRE-LAUNCH",
+    "LIFTOFF",
+    "POWERED_ASCENT",
+    "COASTING",
+    "APOGEE",
+    "DESCENT",
+    "LANDING",
+)
+
+
 MISSION_CONTROL_CSS = """
 <style>
 :root {
@@ -295,6 +306,44 @@ div[data-testid="stMetric"] {
     box-shadow: 0 0 16px #22c55e;
 }
 
+.phase-progress {
+    border: 1px solid rgba(125, 211, 252, 0.16);
+    border-radius: 8px;
+    background: rgba(2, 6, 23, 0.44);
+    padding: 0.85rem;
+    margin: 0.25rem 0 1rem;
+}
+
+.phase-progress-track {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 0.45rem;
+}
+
+.phase-step {
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    border-radius: 6px;
+    background: rgba(15, 23, 42, 0.72);
+    padding: 0.45rem 0.35rem;
+    text-align: center;
+    color: #95a3b8;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.02rem;
+}
+
+.phase-step.phase-complete {
+    border-color: rgba(34, 197, 94, 0.6);
+    color: #86efac;
+    background: rgba(20, 83, 45, 0.35);
+}
+
+.phase-step.phase-active {
+    color: #f8fbff;
+    border-color: currentColor;
+    box-shadow: 0 0 14px rgba(125, 211, 252, 0.3);
+}
+
 .stTabs [data-baseweb="tab-list"] {
     gap: 0.5rem;
 }
@@ -338,6 +387,34 @@ def phase_badge(phase: str) -> str:
         f'<div class="phase-pill" style="color:{color};">'
         f'<span class="phase-dot" style="background:{color};"></span>'
         f"{phase}</div>"
+    )
+
+
+def phase_progress_bar(phase: str) -> str:
+    """Return HTML for segmented mission phase progress."""
+
+    active_phase = phase if phase in FLIGHT_PHASE_SEQUENCE else "PRE-LAUNCH"
+    active_index = FLIGHT_PHASE_SEQUENCE.index(active_phase)
+    step_markup: list[str] = []
+
+    for index, step in enumerate(FLIGHT_PHASE_SEQUENCE):
+        css_class = "phase-step"
+        if index < active_index:
+            css_class += " phase-complete"
+        elif index == active_index:
+            css_class += " phase-active"
+
+        label = step.replace("_", " ")
+        color = PHASE_COLORS.get(step, "#94a3b8") if index == active_index else "#95a3b8"
+        step_markup.append(
+            f'<div class="{css_class}" style="color:{color};">{label}</div>'
+        )
+
+    return (
+        '<div class="phase-progress">'
+        '<div class="status-label">Flight Phase Progress</div>'
+        f'<div class="phase-progress-track">{"".join(step_markup)}</div>'
+        "</div>"
     )
 
 

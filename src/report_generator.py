@@ -49,6 +49,8 @@ def generate_mission_report(
     rocket_spec: dict[str, Any],
     plot_paths: dict[str, str],
     phase_timeline: list[dict[str, Any]] | None = None,
+    vehicle_name: str = "Custom Rocket",
+    vehicle_info: dict[str, Any] | None = None,
 ) -> None:
     """Generate a professional PDF mission report."""
 
@@ -60,6 +62,14 @@ def generate_mission_report(
     story.append(Spacer(1, 12))
     story.append(Paragraph("Mission Report", styles["Heading2"]))
     story.append(Spacer(1, 18))
+    story.append(
+        Paragraph(
+            "Vehicle specifications are simplified and adapted for educational "
+            "simulation. The simulator does not reproduce real-world launch performance.",
+            styles["BodyText"],
+        )
+    )
+    story.append(Spacer(1, 12))
 
     story.append(Paragraph("Mission Summary", styles["Heading2"]))
     story.append(
@@ -70,6 +80,56 @@ def generate_mission_report(
             styles["BodyText"],
         )
     )
+    story.append(Spacer(1, 12))
+
+    summary_context = [["Attribute", "Value"], ["Selected Launch Vehicle", vehicle_name]]
+    if vehicle_info:
+        summary_context.extend(
+            [
+                ["Country", _format_value(vehicle_info.get("country", ""))],
+                ["Organization", _format_value(vehicle_info.get("organization", ""))],
+            ]
+        )
+    story.append(_styled_table(summary_context, colors.whitesmoke))
+    story.append(Spacer(1, 12))
+
+    story.append(Paragraph("Vehicle Specifications", styles["Heading2"]))
+    if vehicle_info:
+        vehicle_rows = [["Parameter", "Value"]]
+        vehicle_rows.extend(
+            [
+                ["Rocket Name", vehicle_name],
+                ["Country", _format_value(vehicle_info.get("country", ""))],
+                ["Organization", _format_value(vehicle_info.get("organization", ""))],
+                ["Height (m)", _format_value(vehicle_info.get("height_m", ""))],
+                ["Diameter (m)", _format_value(vehicle_info.get("diameter_m", ""))],
+                ["Stages", _format_value(vehicle_info.get("stages", ""))],
+                ["Liftoff Mass (kg)", _format_value(vehicle_info.get("liftoff_mass_kg", ""))],
+                ["Payload LEO (kg)", _format_value(vehicle_info.get("payload_leo_kg", ""))],
+                ["Thrust (kN)", _format_value(vehicle_info.get("thrust_kn", ""))],
+                ["Burn Time (s)", _format_value(vehicle_info.get("burn_time_s", ""))],
+            ]
+        )
+        story.append(_styled_table(vehicle_rows, colors.lightgrey))
+    else:
+        story.append(
+            Paragraph(
+                "Custom Rocket mode is active. Vehicle-level catalog data was not selected.",
+                styles["BodyText"],
+            )
+        )
+    story.append(Spacer(1, 12))
+
+    story.append(Paragraph("Vehicle Description", styles["Heading2"]))
+    if vehicle_info:
+        story.append(
+            Paragraph(
+                _format_value(vehicle_info.get("description", "No description available.")),
+                styles["BodyText"],
+            )
+        )
+    else:
+        story.append(Paragraph("User-defined custom vehicle configuration.", styles["BodyText"]))
     story.append(Spacer(1, 12))
 
     story.append(Paragraph("Rocket Parameters", styles["Heading2"]))

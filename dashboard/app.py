@@ -18,6 +18,13 @@ if str(SRC_DIR) not in sys.path:
 from mission import analyze_mission, build_phase_timeline
 from report_generator import generate_mission_report
 from rocket import Rocket
+from rocket_library import (
+    build_comparison_rows,
+    get_rocket_by_name,
+    get_rocket_names,
+    map_vehicle_to_simulator_parameters,
+    return_vehicle_summary,
+)
 from simulator import RocketSimulator
 from visualization import generate_plots
 
@@ -37,6 +44,7 @@ from ui_components import (
     format_number,
     metric_card,
     phase_badge,
+    phase_progress_bar,
     subsystem_card,
 )
 
@@ -44,6 +52,10 @@ from ui_components import (
 REPORTS_DIR = ROOT_DIR / "reports"
 SCREENSHOTS_DIR = ROOT_DIR / "screenshots"
 REPORT_PATH = REPORTS_DIR / "mission_report.pdf"
+EDUCATIONAL_DISCLAIMER = (
+    "Vehicle specifications are simplified and adapted for educational simulation. "
+    "The simulator does not reproduce real-world launch performance."
+)
 
 CONFIG_KEYS = (
     "dry_mass",
@@ -68,6 +80,8 @@ def initialize_session_state() -> None:
     st.session_state.setdefault("live_stream_enabled", False)
     st.session_state.setdefault("stream_step", 4)
     st.session_state.setdefault("stream_interval_s", 0.18)
+    st.session_state.setdefault("selected_vehicle", "Custom Rocket")
+    st.session_state.setdefault("active_vehicle_name", "Custom Rocket")
     initialize_audio_state()
 
     for key, value in MISSION_PRESETS[nominal_preset].items():
@@ -89,7 +103,11 @@ def collect_configuration() -> dict[str, float]:
     return {key: float(st.session_state[f"cfg_{key}"]) for key in CONFIG_KEYS}
 
 
-def run_mission(parameters: dict[str, float]) -> dict[str, Any]:
+def run_mission(
+    parameters: dict[str, float],
+    selected_vehicle: str,
+    vehicle_info: dict[str, Any] | None,
+) -> dict[str, Any]:
     """Run the simulator and build all dashboard mission products."""
 
     rocket = Rocket(
@@ -114,6 +132,8 @@ def run_mission(parameters: dict[str, float]) -> dict[str, Any]:
         rocket_spec=parameters,
         plot_paths=plot_paths,
         phase_timeline=phase_timeline,
+        vehicle_name=selected_vehicle,
+        vehicle_info=vehicle_info,
     )
 
     return {
@@ -124,7 +144,41 @@ def run_mission(parameters: dict[str, float]) -> dict[str, Any]:
         "parameters": parameters,
         "report_path": REPORT_PATH,
         "warnings": warnings,
+        "selected_vehicle": selected_vehicle,
+        "vehicle_info": vehicle_info,
     }
+
+
+def active_vehicle_record() -> dict[str, Any] | None:
+    """Return selected launch vehicle data, excluding the custom mode."""
+
+    vehicle_name = str(st.session_state.get("selected_vehicle", "Custom Rocket"))
+    if vehicle_name == "Custom Rocket":
+        return None
+    return get_rocket_by_name(vehicle_name)
+
+
+def sync_selected_vehicle() -> None:
+    """Apply launch vehicle defaults when selection changes."""
+
+    selected_vehicle = str(st.session_state.get("selected_vehicle", "Custom Rocket"))
+    if selected_vehicle == st.session_state.active_vehicle_name:
+        return
+
+    st.session_state.active_vehicle_name = selected_vehicle
+    if selected_vehicle == "Custom Rocket":
+        st.session_state.mission_status = "CUSTOM VEHICLE MODE"
+        return
+
+    vehicle_record = get_rocket_by_name(selected_vehicle)
+    if vehicle_record is None:
+        st.session_state.mission_status = "VEHICLE DATA NOT FOUND"
+        return
+
+    mapped_parameters = map_vehicle_to_simulator_parameters(vehicle_record)
+    for key, value in mapped_parameters.items():
+        st.session_state[f"cfg_{key}"] = float(value)
+    st.session_state.mission_status = f"VEHICLE LOADED: {selected_vehicle}"
 
 
 def evaluate_mission_warnings(
@@ -172,19 +226,33 @@ def render_sidebar() -> tuple[dict[str, float], bool, bool]:
         st.header("Mission Configuration")
         st.caption("Flight readiness inputs for the vertical launch vehicle.")
 
-        preset_name = st.selectbox(
-            "Mission Preset",
-            options=list(MISSION_PRESETS.keys()),
-            key="selected_preset",
+        vehicle_options = ["Custom Rocket", *get_rocket_names()]
+        st.selectbox(
+            "Select Launch Vehicle",
+            options=vehicle_options,
+            key="selected_vehicle",
         )
+        sync_selected_vehicle()
+        st.caption(EDUCATIONAL_DISCLAIMER)
 
-        preset_columns = st.columns(2)
-        if preset_columns[0].button("Load Preset", use_container_width=True):
-            load_preset(preset_name)
-            st.rerun()
-        if preset_columns[1].button("Reset Nominal", use_container_width=True):
-            load_preset("Nominal Sounding Flight")
-            st.rerun()
+        is_custom_vehicle = st.session_state.selected_vehicle == "Custom Rocket"
+
+        if is_custom_vehicle:
+            preset_name = st.selectbox(
+                "Mission Preset",
+                options=list(MISSION_PRESETS.keys()),
+                key="selected_preset",
+            )
+
+            preset_columns = st.columns(2)
+            if preset_columns[0].button("Load Preset", use_container_width=True):
+                load_preset(preset_name)
+                st.rerun()
+            if preset_columns[1].button("Reset Nominal", use_container_width=True):
+                load_preset("Nominal Sounding Flight")
+                st.rerun()
+        else:
+            st.info(return_vehicle_summary(st.session_state.selected_vehicle))
 
         st.divider()
         st.subheader("Vehicle Parameters")
@@ -392,6 +460,41 @@ def render_subsystem_panel(sample: pd.Series | None) -> None:
     )
 
 
+def render_vehicle_information_panel() -> None:
+    """Render selected launch vehicle details in a compact panel."""
+
+    st.subheader("Launch Vehicle Information")
+    selected_vehicle = str(st.session_state.get("selected_vehicle", "Custom Rocket"))
+    vehicle = active_vehicle_record()
+
+    if selected_vehicle == "Custom Rocket" or vehicle is None:
+        st.markdown(
+            '<div class="section-panel">'
+            "<strong>Rocket Name:</strong> Custom Rocket<br>"
+            "Manual parameter entry is enabled for this mission profile."
+            "</div>",
+            unsafe_allow_html=True,
+        )
+        return
+
+    st.markdown(
+        f'''
+        <div class="section-panel">
+            <strong>Rocket Name:</strong> {selected_vehicle}<br>
+            <strong>Country:</strong> {vehicle["country"]}<br>
+            <strong>Organization:</strong> {vehicle["organization"]}<br>
+            <strong>Height:</strong> {vehicle["height_m"]} m<br>
+            <strong>Diameter:</strong> {vehicle["diameter_m"]} m<br>
+            <strong>Stages:</strong> {vehicle["stages"]}<br>
+            <strong>Liftoff Mass:</strong> {vehicle["liftoff_mass_kg"]:.0f} kg<br>
+            <strong>Payload Capacity (LEO):</strong> {vehicle["payload_leo_kg"]:.0f} kg<br>
+            <strong>Description:</strong> {vehicle["description"]}
+        </div>
+        ''',
+        unsafe_allow_html=True,
+    )
+
+
 def render_playback_controls(mission_package: dict[str, Any]) -> None:
     """Render telemetry playback controls for live feed inspection."""
 
@@ -527,6 +630,9 @@ def render_mission_control_tab(mission_package: dict[str, Any] | None) -> None:
         dispatch_sample_events(sample, mission_package)
 
     render_metric_grid(sample)
+    current_phase = str(sample["flight_phase"]) if sample is not None else "PRE-LAUNCH"
+    st.markdown(phase_progress_bar(current_phase), unsafe_allow_html=True)
+    render_vehicle_information_panel()
     st.subheader("Subsystem Health")
     render_subsystem_panel(sample)
 
@@ -624,6 +730,29 @@ def render_report_tab(mission_package: dict[str, Any] | None) -> None:
     st.subheader("Launch Vehicle Parameters")
     st.dataframe(pd.DataFrame([parameters]), use_container_width=True)
 
+    vehicle_name = mission_package.get("selected_vehicle", "Custom Rocket")
+    vehicle_info = mission_package.get("vehicle_info")
+    st.subheader("Selected Vehicle")
+    if vehicle_info:
+        vehicle_frame = pd.DataFrame(
+            [
+                {
+                    "Rocket Name": vehicle_name,
+                    "Country": vehicle_info["country"],
+                    "Organization": vehicle_info["organization"],
+                    "Height (m)": vehicle_info["height_m"],
+                    "Diameter (m)": vehicle_info["diameter_m"],
+                    "Stages": vehicle_info["stages"],
+                    "Liftoff Mass (kg)": vehicle_info["liftoff_mass_kg"],
+                    "Payload LEO (kg)": vehicle_info["payload_leo_kg"],
+                    "Description": vehicle_info["description"],
+                }
+            ]
+        )
+        st.dataframe(vehicle_frame, use_container_width=True)
+    else:
+        st.info("Custom Rocket selected. Vehicle details are user-defined.")
+
     report_path = mission_package["report_path"]
     if report_path.exists():
         st.download_button(
@@ -635,6 +764,18 @@ def render_report_tab(mission_package: dict[str, Any] | None) -> None:
         )
     else:
         st.warning("PDF report was not found on disk.")
+
+
+def render_comparison_tab() -> None:
+    """Render sortable launch vehicle comparison data."""
+
+    rows = build_comparison_rows()
+    st.subheader("Rocket Comparison")
+    st.caption(EDUCATIONAL_DISCLAIMER)
+    if not rows:
+        st.warning("No launch vehicles found in the library.")
+        return
+    st.dataframe(pd.DataFrame(rows), use_container_width=True)
 
 
 def main() -> None:
@@ -656,7 +797,13 @@ def main() -> None:
         reset_audio_events()
         st.session_state.mission_status = "TERMINAL COUNT"
         perform_countdown(int(st.session_state.countdown_seconds))
-        st.session_state.mission_package = run_mission(configuration)
+        selected_vehicle = str(st.session_state.get("selected_vehicle", "Custom Rocket"))
+        vehicle_info = active_vehicle_record()
+        st.session_state.mission_package = run_mission(
+            configuration,
+            selected_vehicle,
+            vehicle_info,
+        )
         st.session_state.telemetry_frame = 0
         st.session_state.live_stream_enabled = True
         st.session_state.mission_status = "LIVE TELEMETRY"
@@ -664,14 +811,26 @@ def main() -> None:
 
     if quick_run_requested:
         reset_audio_events()
-        st.session_state.mission_package = run_mission(configuration)
+        selected_vehicle = str(st.session_state.get("selected_vehicle", "Custom Rocket"))
+        vehicle_info = active_vehicle_record()
+        st.session_state.mission_package = run_mission(
+            configuration,
+            selected_vehicle,
+            vehicle_info,
+        )
         st.session_state.telemetry_frame = len(st.session_state.mission_package["telemetry"]) - 1
         st.session_state.live_stream_enabled = False
         st.session_state.mission_status = "ANALYSIS COMPLETE"
         st.rerun()
 
-    mission_tab, telemetry_tab, analytics_tab, report_tab = st.tabs(
-        ["Mission Control", "Telemetry", "Performance Analytics", "Mission Report"]
+    mission_tab, telemetry_tab, analytics_tab, comparison_tab, report_tab = st.tabs(
+        [
+            "Mission Control",
+            "Telemetry",
+            "Performance Analytics",
+            "Rocket Comparison",
+            "Mission Report",
+        ]
     )
 
     with mission_tab:
@@ -682,6 +841,9 @@ def main() -> None:
 
     with analytics_tab:
         render_performance_tab(st.session_state.mission_package)
+
+    with comparison_tab:
+        render_comparison_tab()
 
     with report_tab:
         render_report_tab(st.session_state.mission_package)

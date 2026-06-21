@@ -64,6 +64,8 @@ def main() -> None:
         rocket_spec=parameters,
         plot_paths=plot_paths,
         phase_timeline=phase_timeline,
+        vehicle_name="Custom Rocket",
+        vehicle_info=None,
     )
 
     print("Mission Summary")
