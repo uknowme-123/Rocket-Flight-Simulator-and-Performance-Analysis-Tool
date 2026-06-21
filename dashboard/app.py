@@ -1,10 +1,13 @@
-"""Streamlit dashboard for the rocket flight simulator."""
+"""Streamlit Mission Control Center for the rocket flight simulator."""
 
 from __future__ import annotations
 
 import sys
+import time
 from pathlib import Path
+from typing import Any
 
+import pandas as pd
 import streamlit as st
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -12,62 +15,469 @@ SRC_DIR = ROOT_DIR / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from mission import analyze_mission
+from mission import analyze_mission, build_phase_timeline
+from report_generator import generate_mission_report
 from rocket import Rocket
 from simulator import RocketSimulator
 from visualization import generate_plots
 
+from ui_components import (
+    CHART_SPECS,
+    MISSION_CONTROL_CSS,
+    MISSION_PRESETS,
+    build_telemetry_chart,
+    format_number,
+    metric_card,
+    phase_badge,
+)
 
-st.set_page_config(page_title="Rocket Flight Simulator", page_icon=":rocket:", layout="wide")
 
-st.title("Rocket Flight Simulator and Mission Analysis Tool")
-st.caption("Aerospace mission analysis dashboard for a vertical launch simulation.")
+REPORTS_DIR = ROOT_DIR / "reports"
+SCREENSHOTS_DIR = ROOT_DIR / "screenshots"
+REPORT_PATH = REPORTS_DIR / "mission_report.pdf"
 
-with st.sidebar:
-    st.header("Rocket Inputs")
-    dry_mass = st.number_input("Dry Mass (kg)", min_value=0.1, value=3.0, step=0.1)
-    fuel_mass = st.number_input("Fuel Mass (kg)", min_value=0.0, value=2.0, step=0.1)
-    thrust = st.number_input("Peak Thrust (N)", min_value=0.0, value=300.0, step=5.0)
-    burn_time = st.number_input("Burn Time (s)", min_value=0.1, value=8.0, step=0.1)
-    drag_coefficient = st.number_input("Drag Coefficient", min_value=0.0, value=0.45, step=0.01)
-    cross_sectional_area = st.number_input(
-        "Cross Sectional Area (m^2)",
-        min_value=0.001,
-        value=0.02,
-        step=0.001,
+CONFIG_KEYS = (
+    "dry_mass",
+    "fuel_mass",
+    "thrust",
+    "burn_time",
+    "drag_coefficient",
+    "cross_sectional_area",
+)
+
+
+def initialize_session_state() -> None:
+    """Initialize dashboard state for mission configuration and playback."""
+
+    nominal_preset = "Nominal Sounding Flight"
+    st.session_state.setdefault("selected_preset", nominal_preset)
+    st.session_state.setdefault("mission_package", None)
+    st.session_state.setdefault("telemetry_frame", 0)
+    st.session_state.setdefault("countdown_seconds", 5)
+    st.session_state.setdefault("mission_status", "STANDBY")
+    st.session_state.setdefault("active_preset_name", nominal_preset)
+
+    for key, value in MISSION_PRESETS[nominal_preset].items():
+        st.session_state.setdefault(f"cfg_{key}", value)
+
+
+def load_preset(preset_name: str) -> None:
+    """Load a mission preset into Streamlit widget state."""
+
+    for key, value in MISSION_PRESETS[preset_name].items():
+        st.session_state[f"cfg_{key}"] = value
+    st.session_state.active_preset_name = preset_name
+    st.session_state.mission_status = "PRESET LOADED"
+
+
+def collect_configuration() -> dict[str, float]:
+    """Return the current sidebar rocket configuration."""
+
+    return {key: float(st.session_state[f"cfg_{key}"]) for key in CONFIG_KEYS}
+
+
+def run_mission(parameters: dict[str, float]) -> dict[str, Any]:
+    """Run the simulator and build all dashboard mission products."""
+
+    rocket = Rocket(
+        dry_mass=parameters["dry_mass"],
+        fuel_mass=parameters["fuel_mass"],
+        thrust=parameters["thrust"],
+        burn_time=parameters["burn_time"],
+        drag_coefficient=parameters["drag_coefficient"],
+        cross_sectional_area=parameters["cross_sectional_area"],
     )
-
-rocket = Rocket(dry_mass, fuel_mass, thrust, burn_time, drag_coefficient, cross_sectional_area)
-
-if st.button("Run Simulation", type="primary"):
-    simulator = RocketSimulator(rocket)
-    result = simulator.run()
+    result = RocketSimulator(rocket).run()
     telemetry = result.telemetry
     summary = analyze_mission(telemetry)
-    plots = generate_plots(telemetry, str(ROOT_DIR / "screenshots"))
+    phase_timeline = build_phase_timeline(telemetry)
+    plot_paths = generate_plots(telemetry, str(SCREENSHOTS_DIR))
 
-    latest = telemetry.iloc[-1]
-    metric_columns = st.columns(3)
-    metric_columns[0].metric("Current Altitude (m)", f"{latest['altitude_m']:.2f}")
-    metric_columns[1].metric("Current Velocity (m/s)", f"{latest['velocity_mps']:.2f}")
-    metric_columns[2].metric("Current Acceleration (m/s^2)", f"{latest['acceleration_mps2']:.2f}")
-
-    summary_columns = st.columns(3)
-    summary_columns[0].metric("Maximum Altitude (m)", f"{summary['maximum_altitude_m']:.2f}")
-    summary_columns[1].metric("Maximum Velocity (m/s)", f"{summary['maximum_velocity_mps']:.2f}")
-    summary_columns[2].metric(
-        "Flight Duration (s)",
-        f"{summary['total_flight_duration_s']:.2f}",
+    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    generate_mission_report(
+        output_path=str(REPORT_PATH),
+        mission_summary=summary,
+        rocket_spec=parameters,
+        plot_paths=plot_paths,
+        phase_timeline=phase_timeline,
     )
 
-    st.subheader("Telemetry Data")
-    st.dataframe(telemetry, use_container_width=True)
+    return {
+        "telemetry": telemetry,
+        "summary": summary,
+        "phase_timeline": phase_timeline,
+        "plot_paths": plot_paths,
+        "parameters": parameters,
+        "report_path": REPORT_PATH,
+    }
 
-    st.subheader("Engineering Charts")
-    st.image(plots["altitude_plot"], caption="Altitude vs Time", use_container_width=True)
-    st.image(plots["velocity_plot"], caption="Velocity vs Time", use_container_width=True)
-    st.image(plots["acceleration_plot"], caption="Acceleration vs Time", use_container_width=True)
-    st.image(plots["mass_plot"], caption="Mass vs Time", use_container_width=True)
-    st.image(plots["thrust_plot"], caption="Thrust vs Time", use_container_width=True)
-else:
-    st.info("Configure the rocket parameters in the sidebar and run the simulation.")
+
+def current_sample(mission_package: dict[str, Any] | None) -> pd.Series | None:
+    """Return the telemetry row selected by the playback frame."""
+
+    if not mission_package:
+        return None
+
+    telemetry = mission_package["telemetry"]
+    if telemetry.empty:
+        return None
+
+    frame = min(st.session_state.telemetry_frame, len(telemetry) - 1)
+    return telemetry.iloc[frame]
+
+
+def render_sidebar() -> tuple[dict[str, float], bool, bool]:
+    """Render the mission configuration sidebar."""
+
+    with st.sidebar:
+        st.header("Mission Configuration")
+        st.caption("Flight readiness inputs for the vertical launch vehicle.")
+
+        preset_name = st.selectbox(
+            "Mission Preset",
+            options=list(MISSION_PRESETS.keys()),
+            key="selected_preset",
+        )
+
+        preset_columns = st.columns(2)
+        if preset_columns[0].button("Load Preset", use_container_width=True):
+            load_preset(preset_name)
+            st.rerun()
+        if preset_columns[1].button("Reset Nominal", use_container_width=True):
+            load_preset("Nominal Sounding Flight")
+            st.rerun()
+
+        st.divider()
+        st.subheader("Vehicle Parameters")
+        st.number_input("Dry Mass (kg)", min_value=0.1, step=0.1, key="cfg_dry_mass")
+        st.number_input("Fuel Mass (kg)", min_value=0.0, step=0.1, key="cfg_fuel_mass")
+        st.number_input("Peak Thrust (N)", min_value=0.0, step=5.0, key="cfg_thrust")
+        st.number_input("Burn Time (s)", min_value=0.1, step=0.1, key="cfg_burn_time")
+        st.number_input(
+            "Drag Coefficient",
+            min_value=0.0,
+            step=0.01,
+            key="cfg_drag_coefficient",
+        )
+        st.number_input(
+            "Reference Area (m^2)",
+            min_value=0.001,
+            step=0.001,
+            key="cfg_cross_sectional_area",
+        )
+
+        st.divider()
+        st.subheader("Launch Sequencer")
+        st.slider(
+            "Terminal Count Duration (s)",
+            min_value=3,
+            max_value=10,
+            key="countdown_seconds",
+        )
+        launch_requested = st.button(
+            "Initiate Countdown",
+            type="primary",
+            use_container_width=True,
+        )
+        quick_run_requested = st.button("Run Analysis Only", use_container_width=True)
+
+    return collect_configuration(), launch_requested, quick_run_requested
+
+
+def render_hero(mission_package: dict[str, Any] | None) -> None:
+    """Render the Mission Control hero banner."""
+
+    sample = current_sample(mission_package)
+    phase = str(sample["flight_phase"]) if sample is not None else "PRE-LAUNCH"
+    status = st.session_state.mission_status
+    met = format_number(sample["time_s"], "s") if sample is not None else "0.00 s"
+    apogee = "Awaiting simulation"
+    if mission_package:
+        apogee = format_number(mission_package["summary"]["maximum_altitude_m"], "m")
+
+    st.markdown(
+        f"""
+        <div class="hero-banner">
+            <div class="hero-kicker">Launch Vehicle Mission Monitoring Dashboard</div>
+            <div class="hero-title">Mission Control Center</div>
+            <div class="hero-subtitle">
+                Integrated flight dynamics, propulsion telemetry, atmospheric
+                drag modeling, and mission performance analytics for a
+                single-stage vertical launch profile.
+            </div>
+            <div class="status-strip">
+                <div class="status-pill">
+                    <div class="status-label">Mission Status</div>
+                    <div class="status-value">{status}</div>
+                </div>
+                <div class="status-pill">
+                    <div class="status-label">Flight Phase</div>
+                    <div class="status-value">{phase}</div>
+                </div>
+                <div class="status-pill">
+                    <div class="status-label">MET</div>
+                    <div class="status-value">{met}</div>
+                </div>
+                <div class="status-pill">
+                    <div class="status-label">Predicted Apogee</div>
+                    <div class="status-value">{apogee}</div>
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def perform_countdown(seconds: int) -> None:
+    """Render a terminal countdown before executing the mission simulation."""
+
+    countdown_slot = st.empty()
+    for remaining in range(seconds, -1, -1):
+        callout = "Main engine start" if remaining == 0 else "Terminal count active"
+        countdown_slot.markdown(
+            f"""
+            <div class="countdown-display">
+                <div class="status-label">{callout}</div>
+                <div class="countdown-number">T-{remaining}</div>
+                <div class="hero-subtitle">Guidance, telemetry, and range systems nominal.</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        time.sleep(1.0)
+    countdown_slot.empty()
+
+
+def render_metric_grid(sample: pd.Series | None) -> None:
+    """Render real-time telemetry cards for the selected mission frame."""
+
+    if sample is None:
+        st.markdown(
+            '<div class="section-panel">Mission telemetry is waiting for launch authorization.</div>',
+            unsafe_allow_html=True,
+        )
+        return
+
+    cards = [
+        metric_card("Altitude", format_number(sample["altitude_m"], "m"), "#4dd6ff"),
+        metric_card("Velocity", format_number(sample["velocity_mps"], "m/s"), "#f9c74f"),
+        metric_card("Acceleration", format_number(sample["acceleration_mps2"], "m/s^2"), "#f94144"),
+        metric_card("Vehicle Mass", format_number(sample["mass_kg"], "kg"), "#c084fc"),
+        metric_card("Fuel Remaining", format_number(sample["fuel_remaining_kg"], "kg"), "#8cff98"),
+        metric_card("Thrust", format_number(sample["thrust_n"], "N"), "#22c55e"),
+        metric_card("Drag Force", format_number(sample["drag_force_n"], "N"), "#fb7185"),
+        metric_card("Air Density", format_number(sample["air_density_kg_m3"], "kg/m^3", 4), "#38bdf8"),
+    ]
+    st.markdown(
+        '<div class="mission-card-grid">' + "".join(cards) + "</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def render_playback_controls(mission_package: dict[str, Any]) -> None:
+    """Render telemetry playback controls for live feed inspection."""
+
+    telemetry = mission_package["telemetry"]
+    max_frame = len(telemetry) - 1
+    st.session_state.telemetry_frame = min(st.session_state.telemetry_frame, max_frame)
+    selected_frame = st.slider(
+        "Telemetry Playback Frame",
+        min_value=0,
+        max_value=max_frame,
+        value=st.session_state.telemetry_frame,
+    )
+    st.session_state.telemetry_frame = selected_frame
+
+    control_columns = st.columns(4)
+    if control_columns[0].button("Reset Feed", use_container_width=True):
+        st.session_state.telemetry_frame = 0
+        st.rerun()
+    if control_columns[1].button("Step +1", use_container_width=True):
+        st.session_state.telemetry_frame = min(max_frame, st.session_state.telemetry_frame + 1)
+        st.rerun()
+    if control_columns[2].button("Stream +25", use_container_width=True):
+        st.session_state.telemetry_frame = min(max_frame, st.session_state.telemetry_frame + 25)
+        st.rerun()
+    if control_columns[3].button("Go To Landing", use_container_width=True):
+        st.session_state.telemetry_frame = max_frame
+        st.rerun()
+
+
+def render_live_feed(mission_package: dict[str, Any] | None) -> None:
+    """Render a live-style mission event and telemetry feed."""
+
+    if not mission_package:
+        st.info("No mission run loaded. Configure the vehicle and initiate countdown.")
+        return
+
+    telemetry = mission_package["telemetry"]
+    frame = min(st.session_state.telemetry_frame, len(telemetry) - 1)
+    sample = telemetry.iloc[frame]
+    feed_window = telemetry.iloc[max(0, frame - 9) : frame + 1]
+
+    st.markdown(phase_badge(str(sample["flight_phase"])), unsafe_allow_html=True)
+    st.markdown(
+        f"""
+        <div class="telemetry-line">
+            MET {sample['time_s']:.2f}s | ALT {sample['altitude_m']:.2f} m |
+            VEL {sample['velocity_mps']:.2f} m/s | THR {sample['thrust_n']:.2f} N
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.dataframe(feed_window, use_container_width=True, height=270)
+
+
+def render_mission_control_tab(mission_package: dict[str, Any] | None) -> None:
+    """Render the main mission-control tab."""
+
+    sample = current_sample(mission_package)
+    render_metric_grid(sample)
+
+    if mission_package:
+        render_playback_controls(mission_package)
+
+    st.subheader("Live Telemetry Feed")
+    render_live_feed(mission_package)
+
+
+def render_telemetry_tab(mission_package: dict[str, Any] | None) -> None:
+    """Render full telemetry tables and CSV export."""
+
+    if not mission_package:
+        st.info("Telemetry archive will populate after a mission simulation.")
+        return
+
+    telemetry = mission_package["telemetry"]
+    csv_data = telemetry.to_csv(index=False).encode("utf-8")
+    st.download_button(
+        "Download Mission Telemetry CSV",
+        data=csv_data,
+        file_name="mission_telemetry.csv",
+        mime="text/csv",
+        use_container_width=True,
+    )
+
+    st.subheader("Flight Phase Timeline")
+    st.dataframe(pd.DataFrame(mission_package["phase_timeline"]), use_container_width=True)
+
+    st.subheader("Telemetry Archive")
+    st.dataframe(telemetry, use_container_width=True, height=520)
+
+
+def render_performance_tab(mission_package: dict[str, Any] | None) -> None:
+    """Render interactive mission performance charts."""
+
+    if not mission_package:
+        st.info("Performance analytics are available after launch simulation.")
+        return
+
+    telemetry = mission_package["telemetry"]
+    chart_names = list(CHART_SPECS.keys())
+    for left_name, right_name in zip(chart_names[0::2], chart_names[1::2]):
+        left_column, right_column = st.columns(2)
+        with left_column:
+            column, title, unit, color = CHART_SPECS[left_name]
+            st.altair_chart(
+                build_telemetry_chart(telemetry, column, title, unit, color),
+                use_container_width=True,
+            )
+        with right_column:
+            column, title, unit, color = CHART_SPECS[right_name]
+            st.altair_chart(
+                build_telemetry_chart(telemetry, column, title, unit, color),
+                use_container_width=True,
+            )
+
+    remaining_chart = chart_names[-1]
+    column, title, unit, color = CHART_SPECS[remaining_chart]
+    st.altair_chart(
+        build_telemetry_chart(telemetry, column, title, unit, color),
+        use_container_width=True,
+    )
+
+
+def render_report_tab(mission_package: dict[str, Any] | None) -> None:
+    """Render mission analytics and report download support."""
+
+    if not mission_package:
+        st.info("Mission report package will be generated after simulation.")
+        return
+
+    summary = mission_package["summary"]
+    parameters = mission_package["parameters"]
+
+    summary_columns = st.columns(4)
+    summary_columns[0].metric("Maximum Altitude", format_number(summary["maximum_altitude_m"], "m"))
+    summary_columns[1].metric("Maximum Velocity", format_number(summary["maximum_velocity_mps"], "m/s"))
+    summary_columns[2].metric("Apogee Time", format_number(summary["apogee_time_s"], "s"))
+    summary_columns[3].metric("Landing Velocity", format_number(summary["landing_velocity_mps"], "m/s"))
+
+    st.subheader("Mission Summary")
+    st.dataframe(pd.DataFrame([summary]), use_container_width=True)
+
+    st.subheader("Launch Vehicle Parameters")
+    st.dataframe(pd.DataFrame([parameters]), use_container_width=True)
+
+    report_path = mission_package["report_path"]
+    if report_path.exists():
+        st.download_button(
+            "Download Mission Report PDF",
+            data=report_path.read_bytes(),
+            file_name="mission_report.pdf",
+            mime="application/pdf",
+            use_container_width=True,
+        )
+    else:
+        st.warning("PDF report was not found on disk.")
+
+
+def main() -> None:
+    """Run the Streamlit Mission Control Center."""
+
+    st.set_page_config(
+        page_title="Mission Control Center",
+        page_icon=":rocket:",
+        layout="wide",
+        initial_sidebar_state="expanded",
+    )
+    initialize_session_state()
+    st.markdown(MISSION_CONTROL_CSS, unsafe_allow_html=True)
+
+    configuration, launch_requested, quick_run_requested = render_sidebar()
+    render_hero(st.session_state.mission_package)
+
+    if launch_requested:
+        st.session_state.mission_status = "TERMINAL COUNT"
+        perform_countdown(int(st.session_state.countdown_seconds))
+        st.session_state.mission_package = run_mission(configuration)
+        st.session_state.telemetry_frame = len(st.session_state.mission_package["telemetry"]) - 1
+        st.session_state.mission_status = "MISSION COMPLETE"
+        st.rerun()
+
+    if quick_run_requested:
+        st.session_state.mission_package = run_mission(configuration)
+        st.session_state.telemetry_frame = len(st.session_state.mission_package["telemetry"]) - 1
+        st.session_state.mission_status = "ANALYSIS COMPLETE"
+        st.rerun()
+
+    mission_tab, telemetry_tab, analytics_tab, report_tab = st.tabs(
+        ["Mission Control", "Telemetry", "Performance Analytics", "Mission Report"]
+    )
+
+    with mission_tab:
+        render_mission_control_tab(st.session_state.mission_package)
+
+    with telemetry_tab:
+        render_telemetry_tab(st.session_state.mission_package)
+
+    with analytics_tab:
+        render_performance_tab(st.session_state.mission_package)
+
+    with report_tab:
+        render_report_tab(st.session_state.mission_package)
+
+
+if __name__ == "__main__":
+    main()
