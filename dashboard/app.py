@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 import time
+import inspect
 from pathlib import Path
 from typing import Any
 
@@ -126,15 +127,19 @@ def run_mission(
     warnings = evaluate_mission_warnings(parameters, telemetry, summary)
 
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
-    generate_mission_report(
-        output_path=str(REPORT_PATH),
-        mission_summary=summary,
-        rocket_spec=parameters,
-        plot_paths=plot_paths,
-        phase_timeline=phase_timeline,
-        vehicle_name=selected_vehicle,
-        vehicle_info=vehicle_info,
-    )
+    report_signature = inspect.signature(generate_mission_report)
+    report_kwargs: dict[str, Any] = {
+        "output_path": str(REPORT_PATH),
+        "mission_summary": summary,
+        "rocket_spec": parameters,
+        "plot_paths": plot_paths,
+        "phase_timeline": phase_timeline,
+    }
+    if "vehicle_name" in report_signature.parameters:
+        report_kwargs["vehicle_name"] = selected_vehicle
+    if "vehicle_info" in report_signature.parameters:
+        report_kwargs["vehicle_info"] = vehicle_info
+    generate_mission_report(**report_kwargs)
 
     return {
         "telemetry": telemetry,

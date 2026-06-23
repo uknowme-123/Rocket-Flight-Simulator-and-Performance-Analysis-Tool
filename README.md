@@ -2,6 +2,10 @@
 
 A Python-based aerospace simulation tool for modelling rocket flight dynamics, trajectory analysis, altitude prediction, and mission performance evaluation.
 
+The project now includes a Rocket Library for predefined launch vehicles, a
+sortable comparison view, and PDF report integration that carries selected
+vehicle metadata through the simulation workflow.
+
 ## Project Overview
 
 A physics-based Python project that simulates the vertical flight of a single-stage rocket, records telemetry, generates engineering plots, and produces a PDF mission report. It is designed as a portfolio-ready aerospace engineering project for first-year ECE students exploring launch vehicles, avionics, telemetry, and flight dynamics.
@@ -31,6 +35,8 @@ The engine calculates variable thrust, gravity, altitude-dependent drag, velocit
 - Streamlit dashboard for interactive analysis
 - Rocket Library with predefined launch vehicles and custom mode
 - Rocket Comparison tab for sortable vehicle benchmarking
+- Vehicle information panel and educational disclaimer
+- Mission report sections for selected vehicle summary and description
 - Unit tests for core physics and simulation logic
 
 ## Launch Vehicle Library
@@ -52,8 +58,18 @@ When a predefined vehicle is selected, the simulator auto-populates mass model,
 thrust, burn time, drag coefficient, and cross-sectional area using JSON-backed
 reference data in [data/rocket_library.json](data/rocket_library.json).
 
+The dashboard displays the selected vehicle details, and the Mission Report now
+includes mission summary, vehicle specifications, and vehicle description.
+
 Vehicle specifications are simplified and adapted for educational simulation.
 The simulator does not reproduce real-world launch performance.
+
+### Available Vehicle Modes
+
+- Custom Rocket: manual entry preserved for the existing simulator workflow
+- PSLV, GSLV Mk II, LVM3, SSLV
+- Falcon 9, Falcon Heavy
+- Saturn V, Soyuz, Ariane 5
 
 ## Advanced Physics Modules
 
@@ -173,6 +189,14 @@ This generates:
 streamlit run dashboard/app.py
 ```
 
+The dashboard includes these main tabs:
+
+- Mission Control
+- Telemetry
+- Performance Analytics
+- Rocket Comparison
+- Mission Report
+
 ## Screenshots
 
 The project generates engineering plots in the `screenshots/` folder. The dashboard can also be captured and saved as `screenshots/dashboard.png`.
@@ -192,6 +216,7 @@ The tests cover:
 - Net force calculations
 - Rocket mass updates
 - Simulation execution
+- Rocket Library data loading and vehicle mapping
 
 ## Future Roadmap
 
@@ -233,8 +258,6 @@ Rocket-Flight-Simulator-and-Performance-Analysis-Tool/
 
 ## Next Steps
 
-- Add simulator code under `src/`.
-- Document algorithms, assumptions, and formulas in `docs/`.
-- Store plots and UI captures in `screenshots/`.
-- Keep sample inputs and outputs in `data/`.
-- Add Python dependencies to `requirements.txt` when the code is ready.
+- Refresh dashboard screenshots to show the Rocket Library and comparison tab.
+- Document any future vehicle entries in `data/rocket_library.json`.
+- Expand the vehicle library if you want additional launchers or variants.
