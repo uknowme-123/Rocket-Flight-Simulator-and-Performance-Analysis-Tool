@@ -197,6 +197,23 @@ The dashboard includes these main tabs:
 - Rocket Comparison
 - Mission Report
 
+### Vercel Deployment
+
+A Vercel-compatible rewrite is available in [vercel-app](vercel-app).
+
+1. Open the `vercel-app` folder in VS Code or in your terminal.
+2. Install dependencies with `npm install`.
+3. Run `npm run build` to verify the app builds locally.
+4. Import the `vercel-app` folder into Vercel as a Next.js project.
+5. Deploy with the default Next.js settings.
+
+You can also run the rewrite locally with:
+
+```bash
+cd vercel-app
+npm run dev
+```
+
 ## Screenshots
 
 The project generates engineering plots in the `screenshots/` folder. The dashboard can also be captured and saved as `screenshots/dashboard.png`.
