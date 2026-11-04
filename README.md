@@ -244,34 +244,10 @@ The tests cover:
 - Version 6: Launch vehicle mission planner
 - Version 7: Satellite launch simulation
 
-## Repository Topics
-
-- python
-- aerospace
-- rocket-simulation
-- flight-dynamics
-- ece
-- space-tech
-- avionics
-- physics
-- engineering
-- trajectory-analysis
-
 ## Author Information
 
-- Author: Add your name here
+- Author: Rajeev C
 - Field: Aerospace engineering, ECE, avionics, and embedded systems
-
-```text
-Rocket-Flight-Simulator-and-Performance-Analysis-Tool/
-├── README.md
-├── requirements.txt
-├── .gitignore
-├── src/
-├── docs/
-├── screenshots/
-└── data/
-```
 
 ## Next Steps
 
