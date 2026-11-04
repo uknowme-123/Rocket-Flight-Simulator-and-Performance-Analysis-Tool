@@ -6,17 +6,17 @@ import json
 from pathlib import Path
 from typing import Any
 
-from mission import analyze_mission, build_phase_timeline
-from report_generator import generate_mission_report
-from rocket import Rocket
-from simulator import RocketSimulator
-from visualization import generate_plots
+from .mission import analyze_mission, build_phase_timeline
+from .report_generator import generate_mission_report
+from .rocket import Rocket
+from .simulator import RocketSimulator
+from .visualization import generate_plots
 
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = BASE_DIR / "data"
-REPORTS_DIR = BASE_DIR / "reports"
-SCREENSHOTS_DIR = BASE_DIR / "screenshots"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+DATA_DIR = PROJECT_ROOT / "data"
+REPORTS_DIR = PROJECT_ROOT / "reports"
+SCREENSHOTS_DIR = PROJECT_ROOT / "screenshots"
 
 
 def load_rocket_parameters(file_path: Path) -> dict[str, Any]:

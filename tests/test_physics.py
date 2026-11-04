@@ -1,15 +1,17 @@
-import sys
-from pathlib import Path
+"""Tests for physics and atmosphere modules."""
+
+from __future__ import annotations
 
 import pytest
 
-SRC_DIR = Path(__file__).resolve().parent.parent / "src"
-if str(SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(SRC_DIR))
-
-from atmosphere import get_air_density
-from physics import calculate_acceleration, calculate_drag, calculate_gravity, calculate_net_force
-from propulsion import get_thrust
+from rocket_flight_simulator import (
+    get_air_density,
+    calculate_acceleration,
+    calculate_drag,
+    calculate_gravity,
+    calculate_net_force,
+    get_thrust,
+)
 
 
 def test_gravity_calculation() -> None:

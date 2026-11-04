@@ -7,6 +7,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, TypedDict
 
+from .config import DEFAULT_PROPELLANT_FRACTION
+
 
 class RocketRecord(TypedDict):
     """Structured schema for one launch vehicle entry."""
@@ -25,7 +27,7 @@ class RocketRecord(TypedDict):
     description: str
 
 
-ROCKET_LIBRARY_PATH = Path(__file__).resolve().parent.parent / "data" / "rocket_library.json"
+ROCKET_LIBRARY_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "rocket_library.json"
 
 
 @lru_cache(maxsize=1)
@@ -104,7 +106,7 @@ def map_vehicle_to_simulator_parameters(vehicle: RocketRecord) -> dict[str, floa
     """
 
     liftoff_mass = max(float(vehicle["liftoff_mass_kg"]), 1.0)
-    propellant_fraction = 0.85
+    propellant_fraction = DEFAULT_PROPELLANT_FRACTION
     fuel_mass = liftoff_mass * propellant_fraction
     dry_mass = liftoff_mass - fuel_mass
 

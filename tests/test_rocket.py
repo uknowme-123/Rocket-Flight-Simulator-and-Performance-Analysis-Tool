@@ -1,11 +1,8 @@
-import sys
-from pathlib import Path
+"""Tests for rocket mass bookkeeping."""
 
-SRC_DIR = Path(__file__).resolve().parent.parent / "src"
-if str(SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(SRC_DIR))
+from __future__ import annotations
 
-from rocket import Rocket
+from rocket_flight_simulator import Rocket
 
 
 def test_rocket_mass_updates() -> None:

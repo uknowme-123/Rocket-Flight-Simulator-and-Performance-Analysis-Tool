@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sys
 import time
 import inspect
 from pathlib import Path
@@ -11,23 +10,19 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
-ROOT_DIR = Path(__file__).resolve().parent.parent
-SRC_DIR = ROOT_DIR / "src"
-if str(SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(SRC_DIR))
-
-from mission import analyze_mission, build_phase_timeline
-from report_generator import generate_mission_report
-from rocket import Rocket
-from rocket_library import (
+from rocket_flight_simulator import (
+    analyze_mission,
+    build_phase_timeline,
+    generate_mission_report,
+    Rocket,
+    RocketSimulator,
+    generate_plots,
     build_comparison_rows,
     get_rocket_by_name,
     get_rocket_names,
     map_vehicle_to_simulator_parameters,
     return_vehicle_summary,
 )
-from simulator import RocketSimulator
-from visualization import generate_plots
 
 from audio_system import (
     initialize_audio_state,
@@ -50,6 +45,7 @@ from ui_components import (
 )
 
 
+ROOT_DIR = Path(__file__).resolve().parent.parent
 REPORTS_DIR = ROOT_DIR / "reports"
 SCREENSHOTS_DIR = ROOT_DIR / "screenshots"
 REPORT_PATH = REPORTS_DIR / "mission_report.pdf"

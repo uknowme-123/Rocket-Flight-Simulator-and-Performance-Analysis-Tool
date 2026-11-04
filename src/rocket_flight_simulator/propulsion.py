@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from config import GRAVITY
+from .config import GRAVITY
 
 
 def get_thrust(time: float, peak_thrust: float = 300.0, burn_time: float = 8.0) -> float:

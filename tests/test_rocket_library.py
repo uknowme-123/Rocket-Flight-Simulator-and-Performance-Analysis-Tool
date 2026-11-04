@@ -1,11 +1,8 @@
-import sys
-from pathlib import Path
+"""Tests for rocket library functionality."""
 
-SRC_DIR = Path(__file__).resolve().parent.parent / "src"
-if str(SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(SRC_DIR))
+from __future__ import annotations
 
-from rocket_library import (  # noqa: E402
+from rocket_flight_simulator import (
     build_comparison_rows,
     get_rocket_by_name,
     get_rocket_names,

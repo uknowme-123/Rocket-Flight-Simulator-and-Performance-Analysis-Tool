@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from config import AIR_DENSITY, GRAVITY
+from .config import AIR_DENSITY, GRAVITY
 
 
 def calculate_gravity(mass: float) -> float:

@@ -6,13 +6,13 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from atmosphere import get_air_density
-from config import MAX_SIMULATION_TIME, TIME_STEP
-from flight_phases import FlightPhase, detect_flight_phase
-from physics import calculate_acceleration, calculate_drag, calculate_gravity, calculate_net_force
-from propulsion import calculate_mass_flow_rate, get_thrust
-from rocket import Rocket
-from telemetry import TelemetryLogger
+from .atmosphere import get_air_density
+from .config import MAX_SIMULATION_TIME, TIME_STEP
+from .flight_phases import FlightPhase, detect_flight_phase
+from .physics import calculate_acceleration, calculate_drag, calculate_gravity, calculate_net_force
+from .propulsion import calculate_mass_flow_rate, get_thrust
+from .rocket import Rocket
+from .telemetry import TelemetryLogger
 
 
 @dataclass

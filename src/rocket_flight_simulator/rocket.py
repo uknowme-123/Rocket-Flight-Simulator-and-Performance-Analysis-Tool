@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from propulsion import calculate_specific_impulse
+from .propulsion import calculate_specific_impulse
 
 
 @dataclass
